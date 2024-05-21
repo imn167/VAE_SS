@@ -1,4 +1,4 @@
-import openturns as ot
+import openturn_sampling as ot
 import matplotlib.pyplot as plt 
 import numpy as np
 
