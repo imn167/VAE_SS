@@ -9,64 +9,80 @@ import time
 ##### Creation of the Sampling class ########
 
 class MoGPrior(layers.Layer):
-  def __init__(self, L, num_components, multiplier=1.0, **kwargs):
+  def __init__(self, latent_dim, num_components, **kwargs):
     super(MoGPrior, self).__init__(**kwargs)
-    self.L = L
+    self.latent_dim = latent_dim
     self.num_components = num_components
-    self.multiplier = multiplier
 
     # means and log variances (trainable parameters)
-    self.means = tf.Variable(tf.random.normal([num_components, L]) * multiplier, dtype=tf.float32)
-    self.logvars = tf.Variable(tf.random.normal([num_components, L]), dtype=tf.float32)
+    self.means = tf.Variable(tf.random.normal([num_components, latent_dim]), 
+                             dtype=tf.float32, trainable=True, name='means')
+    self.logvars = tf.Variable(tf.random.normal([num_components, latent_dim]),
+                                dtype=tf.float32, trainable=True, name='logvars')
 
     # mixing weights (trainable parameter)
-    self.w = tf.Variable(tf.ones([1,num_components]), dtype=tf.float32)
+    self.w = tf.nn.softmax(tf.Variable(tf.ones([1,num_components]), dtype=tf.float32, trainable=True), axis = 1)
 
   def get_params(self):
-    return self.means, self.logvars
+    return self.means, self.logvars, self.w
 
-  def call(self):
-    # get means and log variances
-    means, logvars = self.get_params()
+  def call(self, batch_size):
+    # get means and log variances of the mixture
+    means, logvars, w = self.get_params()
 
-    # normalize mixing weights using softmax
+    # normalize mixing weights using softmax (see gumball)
     w = tf.nn.softmax(self.w, axis=1)
-
     # sample component indices
-    indexes = tf.random.categorical(tf.math.log(w), 1)
+    indexes = (tf.random.categorical(tf.math.log(w), batch_size))[0]
 
     # sample from chosen components
-    #z = []
-    eps = tf.random.normal((1, self.L))
-    indx = indexes
-    z = means[ indx[0,0]] + eps * tf.exp(0.5*logvars[indx[0,0]])
-    #z.append(z_i)
-    #z = tf.stack(z, axis=0)
+    z = tf.map_fn(fn= lambda indx : means[indx] + tf.random.normal(shape= (1,2)) * tf.exp(0.5*logvars[indx]), 
+          elems= indexes,
+          dtype=tf.float32)
+    z = tf.squeeze(z)
 
     return z
+  #compute the log_density of each gaussian at the point z 
+  def log_normal_diag(self, z, mean, logvar):
+     nn_exp = -0.5*( tf.math.log(2.0*np.pi) + logvar) 
+     exp = -0.5* (z-mean)**2 * (tf.exp(-logvar))
+     return tf.reduce_sum(nn_exp + exp, axis = -1) 
+  
+  def log_prob(self, z):
+     #getting means and vars of the gausiian mixture 
+     means, logvars, w = self.get_params() 
 
+     #normalising the weight with the softmax transformation 
+     w = tf.transpose(tf.nn.softmax(w, axis=1))
+     #reshape for broadcast 
+     z =  tf.expand_dims(z, axis=0) #1 x batch x latent_dim
+     means = tf.expand_dims(means, axis=1) #num_compo x 1 x latent_dim
+     logvars = tf.expand_dims(logvars, axis=1) #num_compo x 1 x latent_dim
 
+     #we compute the log of each gaussian for each z 
+     log_prob = self.log_normal_diag(z, means, logvars) + tf.math.log(w) #num_compo x batch
+     prob = tf.reduce_logsumexp(log_prob, axis=0) #log(sum(exp())) #batch
+     return prob
+
+  
 class Sampling(layers.Layer):
-   def __init__(self, latent_dim, num_components, **kwargs):
-      super(Sampling, self).__init__(name='sampler')
-      self.latent_dim = latent_dim
-      self.n_components = num_components
-   def call(self, inputs):
-      z_mean, log_var_z = inputs
-      batch = tf.shape(z_mean)[0]
-      gaussian_mixture = MoGPrior(self.latent_dim, self.n_components).call()
-      return z_mean + tf.exp(0.5* log_var_z) * gaussian_mixture
+    def call(self, inputs):
+        z_mean, z_log_var = inputs
+        batch = tf.shape(z_mean)[0] 
+        dim = tf.shape(z_mean)[1]
+        epsilon = tf.random.normal(shape= (batch, dim))
+        return z_mean + tf.exp(.5 * z_log_var) * epsilon
     
 ##### Creation of the Encoder Class #####
 class Encoder(layers.Layer):
-  def __init__(self, input_dim, latent_dim, n_components, **kwargs):
+  def __init__(self, input_dim, latent_dim, **kwargs):
     super(Encoder, self).__init__(name='encoder', **kwargs)
     self.enc1 = layers.Dense(input_dim, activation='relu')
     self.enc2 = layers.Dense(64, activation = 'relu')
     self.enc3 = layers.Dense(32, activation = 'relu')
     self.mean_z = layers.Dense(latent_dim, name = 'z_mean')
     self.logvar_z = layers.Dense(latent_dim, name = 'z_log_var')
-    self.sampling = Sampling(latent_dim, n_components)
+    self.sampling = Sampling()
 
   def call(self, inputs):
     x = self.enc1(inputs)
@@ -77,6 +93,7 @@ class Encoder(layers.Layer):
     z = self.sampling([z_mean, z_log_var])
     return z_mean, z_log_var, z
   
+     
 
 ############## Creation of the Decoder Class #################
 class Decoder(layers.Layer):
@@ -95,14 +112,16 @@ class Decoder(layers.Layer):
    z = self.dec3(z)
    return self.out(z), self.x_log_var(z)
  
+    
 ##################### Creation of subclass od Model : VAE ########################
 ## We can see the subclass VAE as a Keras Model therefore it has the several method as fit and compile 
 ## We overwrite the train function of the model : train_step (customizing the training)
 class VAE(tf.keras.Model):
-    def __init__(self, encoder, decoder, **kwargs):
+    def __init__(self, encoder, decoder, prior, **kwargs):
         super(VAE, self).__init__(name = 'vae', **kwargs)
         self.encoder = encoder
         self.decoder = decoder
+        self.prior = prior
         
         self.loss_tracker = tf.keras.metrics.Mean(name = 'loss')
         self.kl_loss_tracker = tf.keras.metrics.Mean(name = 'kl_loss')
@@ -111,7 +130,9 @@ class VAE(tf.keras.Model):
     def call(self, inputs):
         z_mean, z_log_var, z = self.encoder(inputs)
         reconstruction, x_log_var = self.decoder(z)
-        return z_mean, z_log_var, reconstruction, x_log_var
+        batch = tf.shape(z_mean)[0]
+        prior_sample = self.prior(batch)
+        return z_mean, z_log_var, reconstruction, x_log_var, z, prior_sample
     
     def get_encoder_decoder(self):
         return self.encoder, self.decoder
@@ -120,14 +141,15 @@ class VAE(tf.keras.Model):
        # data, y = data
         #y = tf.reshape(y,[-1])
         with tf.GradientTape() as tape :
-            z_mean, z_log_var, reconstruction, x_log_var = self(data) 
 
+            z_mean, z_log_var, reconstruction, x_log_var, z, prior_sample = self(data) 
             #we compute the first loss : the log-likelyhood 
             scale_x = tf.exp(x_log_var) #variance 
             log_pdf = 0.5 * tf.reduce_sum(tf.pow(data-reconstruction, 2) / scale_x + x_log_var, axis = 1) #-log_pdf because we want to maximise it (SGD aim to minimize in keras)
             reconstruction_loss =  tf.reduce_mean(log_pdf) #tf.multiply(log_pdf, y)
-            kl_loss =  -0.5 * (1 +  z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
-            kl_loss = tf.reduce_mean(tf.reduce_sum(  kl_loss, axis =1 )) 
+            entropy =  tf.reduce_sum(-0.5 * (tf.math.log(2.0*np.pi) + 1 +  z_log_var), axis=1 )
+            cross_entropy= self.prior.log_prob(z)
+            kl_loss = tf.reduce_mean(entropy -cross_entropy) 
             total_loss =( reconstruction_loss + kl_loss)
 
         grads = tape.gradient(total_loss, self.trainable_weights)
