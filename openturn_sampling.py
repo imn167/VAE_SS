@@ -16,3 +16,5 @@ yyze = ot.Normal(1).computePDF(xx)
 full = ot.ComposedDistribution([failure_distr] + (20-1)*[ot.Normal(1)])
 
 plt.hist(np.array(full.getSample(1000)[:, 0]).reshape(-1,), bins = 'auto')
+
+

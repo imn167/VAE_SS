@@ -1,6 +1,7 @@
 import numpy as np 
 from scipy import stats
-from function.VAE import *
+
+from VAE import *
 
 
 ############# SUBSET SIMULATION ALGORITHME ########################
@@ -77,3 +78,41 @@ def subset_simulation(sample, threshold,phi, latent_dim, sd,kernel_param,  level
     return sequence, k, failure, quantile, accep_rate
 
 
+
+class SS():
+    def __init__(self, proposal, **kwargs) :
+        super(SS, self).__init__(**kwargs)
+
+        self.quantile = list()
+        self.sequence = list()
+        self.accep_rate = list()
+        self.proposal = list()
+
+    def call(self, sample, threshold, phi, level = .1):
+        dim, N = np.shape(sample)
+        PHI = phi(sample)
+        self.quantile.append(np.quantile(PHI, 1-level)) #look for another way to do quantiles 
+
+        k = 0
+        while self.quantile[k] < threshold:
+            idx = np.where(PHI > self.quantile[k])[0] #index that statisfie.s the condition 
+        # RAISING AN ERROR "vae approximation could be bad"
+            try: 
+                idx[0]
+            except IndexError:
+                print("Exception raised")
+                break
+
+            #BOOTSTRAP ON THE N*LEVEL SELECTED SAMPLES 
+            random_seed = np.random.choice(a=idx, size =N)
+            sample_threshold = sample[:, random_seed] #N*level samples that lie in Fk 
+            phi_threshold = PHI[random_seed]
+            ## simulation according to mcmc 
+            chain = np.zeros((dim, N)) # mcmc chain 
+            #tensor to parallelize the process 
+            L = np.zeros((int(1/level), dim, N)) 
+            accep_sequance = np.zeros(N)
+            L[0] = sample_threshold
+            phi_accepted = phi_threshold
+            for j in range(int(1/level-1)):
+                candidate = L[j] + self.proposal #writing a proposal for the MMA ? 

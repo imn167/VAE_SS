@@ -2,7 +2,7 @@ from tensorflow.keras import layers
 import tensorflow as tf
 import numpy as np
 import scipy.stats as sp 
-
+import openturns as ot 
 
 import time
 
@@ -28,22 +28,27 @@ class MoGPrior(tf.keras.Model):
   def get_params(self):
     return self.means, self.logvars, self.w
 
-  def call(self, batch_size):
+  def call(self):
     # get means and log variances of the mixture
     means, logvars, w = self.get_params()
 
     # normalize mixing weights using softmax (see gumball)
     w = tf.nn.softmax(self.w, axis=1)
     # sample component indices
-    indexes = (tf.random.categorical(tf.math.log(w), batch_size))[0]
+    #indexes = (tf.random.categorical(tf.math.log(w), batch_size))[0]
 
     # sample from chosen components
-    z = tf.map_fn(fn= lambda indx : means[indx] + tf.random.normal(shape= (1,2)) * tf.exp(0.5*logvars[indx]),
-          elems= indexes,
-          dtype=tf.float32)
-    z = tf.squeeze(z)
+    #z = tf.map_fn(fn= lambda indx : means[indx] + tf.random.normal(shape= (1,2)) * tf.exp(0.5*logvars[indx]),
+     #     elems= indexes,
+      #    dtype=tf.float32)
+    #z = tf.squeeze(z)
+    ColDist = [ot.Normal(mu, sigma) for mu, sigma in zip(means.numpy(), np.exp(0.5*logvars.numpy()))]
+    weight = np.array(tf.nn.softmax(w)).reshape(-1)
+    myMixture = ot.Mixture(ColDist, weight)
+    #z =myMixture.getSample(batch_size.numpy())
 
-    return z
+    return myMixture
+
   #compute the log_density of each gaussian at the point z
   def log_normal_diag(self, z, mean, logvar):
      nn_exp = -0.5*( tf.math.log(2.0*np.pi) + logvar)
@@ -164,49 +169,57 @@ class AutoEncoder(tf.keras.Model):
 ## We can see the subclass VAE as a Keras Model therefore it has the several method as fit and compile 
 ## We overwrite the train function of the model : train_step (customizing the training)
 class VAE(tf.keras.Model):
-    def __init__(self, encoder, decoder, prior, **kwargs):
-        super(VAE, self).__init__(name = 'vae', **kwargs)
-        self.encoder = encoder
-        self.decoder = decoder
-        self.prior = prior
+  def __init__(self, encoder, decoder, prior, **kwargs):
+      super(VAE, self).__init__(name = 'vae', **kwargs)
+      self.encoder = encoder
+      self.decoder = decoder
+      self.prior = prior
         
-        self.loss_tracker = tf.keras.metrics.Mean(name = 'loss')
-        self.kl_loss_tracker = tf.keras.metrics.Mean(name = 'kl_loss')
-        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(name = 'reconstruction_loss')
+      self.loss_tracker = tf.keras.metrics.Mean(name = 'loss')
+      self.kl_loss_tracker = tf.keras.metrics.Mean(name = 'kl_loss')
+      self.reconstruction_loss_tracker = tf.keras.metrics.Mean(name = 'reconstruction_loss')
     
-    def call(self, inputs):
-        z_mean, z_log_var, z = self.encoder(inputs)
-        reconstruction, x_log_var = self.decoder(z)
-        #batch = tf.shape(z_mean)[0]
-        #prior_sample = self.prior(batch)
-        return z_mean, z_log_var, reconstruction, x_log_var, z
+  def call(self, inputs):
+    z_mean, z_log_var, z = self.encoder(inputs)
+    reconstruction, x_log_var = self.decoder(z)
+    return z_mean, z_log_var, reconstruction, x_log_var, z
     
-    def get_encoder_decoder(self):
-        return self.encoder, self.decoder
+  def get_encoder_decoder(self):
+    return self.encoder, self.decoder
+
+  def density_x(self, n_samples):
+    z = self.prior(n_samples)
+    _, _, x_mean, x_log_var = self.decoder(z) #n_samples distribution 
+    Dist = [[ot.Normal(np.array(mu), np.exp(0.5*np.array(sigma))) for mu, sigma in zip(x_mean, x_log_var)]]
+    Distr_x = ot.Mixture(Dist)
+    return Distr_x
     
-    def train_step(self, data):
+  def train_step(self, data):
        # data, y = data
         #y = tf.reshape(y,[-1])
-        with tf.GradientTape() as tape :
+    with tf.GradientTape() as tape :
 
-            z_mean, z_log_var, reconstruction, x_log_var, z = self(data) 
-            #we compute the first loss : the log-likelyhood 
-            scale_x = tf.exp(x_log_var) #variance 
-            log_pdf = 0.5 * tf.reduce_sum(tf.pow(data-reconstruction, 2) / scale_x + x_log_var, axis = 1) #-log_pdf because we want to maximise it (SGD aim to minimize in keras)
-            reconstruction_loss =  tf.reduce_mean(log_pdf) #tf.multiply(log_pdf, y)
-            entropy =  tf.reduce_sum(-0.5 * (tf.math.log(2.0*np.pi) + 1 +  z_log_var), axis=1 )
-            cross_entropy= self.prior.log_prob(z)
-            kl_loss = tf.reduce_mean(entropy -cross_entropy) 
-            total_loss =( reconstruction_loss + kl_loss)
+      z_mean, z_log_var, reconstruction, x_log_var, z = self(data) 
+      #we compute the first loss : the log-likelyhood 
+      scale_x = tf.exp(x_log_var) #variance 
+      log_pdf = 0.5 * tf.reduce_sum(tf.pow(data-reconstruction, 2) / scale_x + x_log_var, axis = 1) #-log_pdf because we want to maximise it (SGD aim to minimize in keras)
+      reconstruction_loss =  tf.reduce_mean(log_pdf) #tf.multiply(log_pdf, y)
+      entropy =  tf.reduce_sum(-0.5 * (tf.math.log(2.0*np.pi) + 1 +  z_log_var), axis=1 )
+      cross_entropy= self.prior.log_prob(z)
+      kl_loss = tf.reduce_mean(entropy -cross_entropy) 
+      total_loss =( reconstruction_loss + kl_loss)
 
-        grads = tape.gradient(total_loss, self.trainable_weights)
-        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+    grads = tape.gradient(total_loss, self.trainable_weights)
+    self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
         
-        self.loss_tracker.update_state(total_loss)
-        self.reconstruction_loss_tracker.update_state(reconstruction_loss)
-        self.kl_loss_tracker.update_state(kl_loss)
+    self.loss_tracker.update_state(total_loss)
+    self.reconstruction_loss_tracker.update_state(reconstruction_loss)
+    self.kl_loss_tracker.update_state(kl_loss)
+    
 
-        return {m.name: m.result() for m in self.metrics}
-        
+    return {m.name: m.result() for m in self.metrics}
+
+  
+
 
 
