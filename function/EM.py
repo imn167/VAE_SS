@@ -33,10 +33,18 @@ def EM(z, prior, maxiter, epsilon):
     if type(z) is not np.ndarray:
         z = z.numpy()
     N, d = z.shape
+    
+    traj_means = list()
+    traj_sigma2 = list()
+    traj_w = list()
     means = (prior.means).numpy() 
     sigma2 = np.exp(prior.logvars.numpy())
     w = tf.nn.softmax(prior.w).numpy().reshape(-1)
     K = w.shape[0]    
+
+    traj_means.append(means)
+    traj_sigma2.append(sigma2)
+    traj_w.append(w)
 
     storage = deque()
     ####### initialization #######
@@ -45,18 +53,25 @@ def EM(z, prior, maxiter, epsilon):
     
     #Maximization 
     w_t, mu_t, sigma2_t = maximization(tau_membership, z, K, N, d)
-    storage.append([w_t, mu_t, sigma2_t])
+    #storage.append([w_t, mu_t, sigma2_t])
     converged = False 
     j=1
-    while j< maxiter :
+    while j< maxiter  and (not converged):
         #expectation 
         tau_membership = expectation(z, mu_t, sigma2_t, N, K, w_t)
         #maximization
         w_t, mu_t, sigma2_t = maximization(tau_membership, z, K, N, d)
-        storage.append([w_t, mu_t, sigma2_t])
+        #storage.append([w_t, mu_t, sigma2_t])
+        traj_means.append(means)
+        traj_sigma2.append(sigma2)
+        traj_w.append(w)
         j+=1
+        diff_means = np.min(np.linalg.norm(traj_means[-1]-traj_means[-2], axis = 1))
+        diff_sigma2 = np.min(np.linalg.norm(traj_sigma2[-1]- traj_sigma2[-2], axis = 1))
+        diff_w = np.min(traj_w[-1]-traj_w[-2])
+        converged = (diff_means > epsilon) and (diff_sigma2 > epsilon) and (diff_w > epsilon)
     
-    return w_t, mu_t, sigma2, storage 
+    return w_t, mu_t, sigma2, j
 
 
 ##plot 
@@ -69,6 +84,8 @@ def mixture_plot(z,w, mu, sigma2, x1,x2, y1, y2):
     plt.scatter(z[:,0], z[:,1], s=8)
     for i in range(K):
         plt.contour(X, Y,np.array( rv[i].pdf(pos)))
+    
+    plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Trunacted_Gaussian_EM_mixture.png')
     plt.show()
 
 

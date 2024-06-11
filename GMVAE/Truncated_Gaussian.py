@@ -3,12 +3,14 @@ import time
 
 sys.path.append('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS')
 
+sys.path.append('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss')
+
 from function.EM import *
 from function.VAE_GoM import *
 
 
 #importing data 
-two_mode = np.load('../two_component_truncated.npy')
+two_mode = np.load('../two_component_truncated.npy') #10000 x 20
 #print(two_mode)
 d = two_mode.shape[1]
 
@@ -26,23 +28,26 @@ z_mean, _, _ = encoder(two_mode)
 plt.figure()
 plt.plot(ae.history.history['loss'])
 plt.title('Loss trajectory for AutoEncoder')
+plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Truncated_Gaussian_LossAE.png')
 plt.show()
 
 plt.figure(figsize=(12,6))
 for i in range(1):
     plt.subplot(1,2, i+1)
     plt.scatter(z_mean[:, i], z_mean[:,i+1], s = 5)
+plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Truncated_Gaussian_Latent_Space.png')
 plt.show()
 
-beggening = time.time()
+start = time.time()
 prior = MoGPrior(2,4)
-w_t, mu_t, sigma2_t, storage = EM(z_mean, prior, 1000, 1e-3)
-print(w_t)
-print(time.time() - beggening)
+w_t, mu_t, sigma2_t, n_iter = EM(z_mean, prior, 100, 1e-3)
+print(w_t, n_iter)
+print(time.time() - start)
 
 
 
 mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
+
 
 prior.means.assign(tf.constant(mu_t, dtype=tf.float32))
 prior.logvars.assign(tf.math.log(tf.constant(sigma2_t, dtype=tf.float32)))
@@ -87,4 +92,5 @@ plt.subplot(5,5,2)
 plt.hist(sample[:,1], bins = 'auto', density=True);
 plt.plot(xx, dist.computePDF(xx.reshape(-1,1)))
 
+plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Truncated_Gaussian_reconstruction.png')
 plt.show()

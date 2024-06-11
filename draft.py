@@ -1,35 +1,97 @@
-z = z_mean
-z = z.numpy()
-N, d = z.shape
-means = (prior.means).numpy() 
-sigma2 = np.exp(prior.logvars.numpy())
-w = tf.nn.softmax(prior.w).numpy().reshape(-1)
-K = w.shape[0]  
-means
 
-tau = expectation(z, np.ones((K,2)), np.ones((K,2)), N, K, w)
-w_t, mu_t, sigma2_t = maximization(tau, z, K, N,d)
-(tau.T).reshape(K,1,-1)
-(((z.T).reshape(1,d,N)-means.reshape(K,d,1))**2 *(tau.T).reshape(K,1,-1) ).sum(axis=2)/(tau.sum(axis=0)).reshape(-1,1)
-sigma2_t
+import numpy as np
+import matplotlib.pyplot as plt 
+
+def four_branch(X, beta =0):
+   
+    d, N = X.shape 
+    quant1 = beta + np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis=1)
+    quant2 = beta - np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis= 1 )
+    quant3 = beta + np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2)+1 :, :], axis= 0)) / np.sqrt(d), axis=1)
+    quant4 = beta - np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2)+1 :, :], axis= 0)) / np.sqrt(d), axis=1)
+
+    tensor = np.concatenate([quant1, quant2, quant3, quant4], axis=1)
+    minimum = np.min(tensor, axis = 1)
+        
+
+    return - minimum
+
+d = 10
+N = 10000
+samples = np.random.normal(size = (N,d))
+PHI = four_branch(samples.T)
+
+quantile = np.quantile(PHI, 0.5)
+
+idx = np.where(PHI > quantile)[0]
+
+sample_threshold = samples[idx, :]
+phi_threshold = PHI[ idx]
+
+from function.VAE_GoM import *
+
+encoder = Encoder(d, 2, True)
+decoder = Decoder(d,2, True)
+
+ae = AutoEncoder(encoder, decoder)
+ae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3))
+ae.fit(sample_threshold ,epochs=150, batch_size=64, shuffle=True, verbose = 0)
+
+plt.figure()
+plt.plot(ae.history.history['loss'])
+plt.title('Loss trajectory for AutoEncoder')
+plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Truncated_Gaussian_LossAE.png')
+plt.show()
+
+z_mean, _, _ = encoder(sample_threshold)
+
+plt.figure(figsize=(12,6))
+for i in range(1):
+    plt.subplot(1,2, i+1)
+    plt.scatter(z_mean[:, i], z_mean[:,i+1], s = 5)
+plt.show()
+
+from function.EM import *
+
+start = time.time()
+prior = MoGPrior(2,4)
+w_t, mu_t, sigma2_t, j = EM(z_mean, prior, 15, 1e-3)
+print(w_t, j)
+print(time.time() - start)
 
 
-w_t, mu_t, sigma2_t = EM(z_mean, prior, 10, 1e-3)
-print(w_t, '\n', mu_t, '\n', sigma2_t)
 
-X, Y = np.meshgrid(np.linspace(-15,5, 1000), np.linspace(-2,16, 1000))
-pos = np.dstack((X,Y))
-from scipy.stats import multivariate_normal
-rv1  = multivariate_normal(mu_t[0], np.diag(tf.sqrt(sigma2_t[0]))) 
-plt.scatter(z_mean[:,0], z_mean[:,1], s=8)
-plt.contour(X,Y, rv1.pdf(pos), colors = 'red', alpha = .3)
+mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
+
+mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
 
 
-w_t = tau.mean(axis =0 )
-mu_t = tau.reshape(-1,1,K) * z.reshape(-1,d,1) #N x d x K
-mu_t = (mu_t.sum(axis=0)).T #Kxd
+prior.means.assign(tf.constant(mu_t, dtype=tf.float32))
+prior.logvars.assign(tf.math.log(tf.constant(sigma2_t, dtype=tf.float32)))
+prior.w.assign(tf.constant(w_t.reshape(1,-1), dtype=tf.float32))
 
-sigma2_t = (z.reshape(1,d,-1) - mu_t.reshape(K,d,1))**2 * tau.reshape(K,1,-1) #K x d x N
-sigma2_t = sigma2_t.sum(axis = 2) /( tau.sum(axis = 0)).reshape(-1,1)
-#tau = expectation(z, mu_t, sigma2_t,N, K, w_t)
-sigma2_t
+
+vae = VAE(encoder, decoder, prior)
+vae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
+vae.fit(sample_threshold, epochs = 150, batch_size = 32, shuffle = True) 
+
+plt.plot(vae.history.history['kl_loss'])
+plt.plot(vae.history.history['reconstruction_loss'])
+
+z_mean,_, _ = encoder(sample_threshold)
+
+ColDist = [ot.Normal(np.array(mu), np.exp(0.5*np.array(sigma))) for mu, sigma in zip(prior.means, prior.logvars)]
+weight = np.array(tf.nn.softmax(prior.w, axis =1)).reshape(-1)
+myMixture = ot.Mixture(ColDist, weight)
+z =myMixture.getSample(10000)
+z= np.array(z)
+mean_x, log_var_x = decoder(z) #we get each mean and log variance of the several distribution then we sample from it
+
+sample = np.random.normal(loc=mean_x, scale= tf.exp(log_var_x/2))
+
+plt.figure(figsize = (12,7))
+for i in range(0,d):
+  plt.subplot(5,5,i+1)
+  plt.hist(sample[:,i], bins = 'auto', density=True);
+
+plt.show()

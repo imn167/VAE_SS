@@ -7,15 +7,15 @@ import time
 
 ################## Small dimension :: 2-Dimension #################################
 
-def four_branch(X):
-    if type(X) is tuple:
-        quant1 = np.expand_dims((X[0]-X[1])**2 /10 - (X[0] + X[1]) / np.sqrt(2) + 3, 2)
-        quant2 = np.expand_dims((X[0]-X[1])**2 /10 + (X[0] + X[1]) / np.sqrt(2) + 3,2)
-        quant3 = np.expand_dims((X[0]-X[1]) + 7/ np.sqrt(2) ,2)
-        quant4 = np.expand_dims((X[1]-X[0]) + 7/ np.sqrt(2) ,2)
+def four_branch(X, linear = False):
+    if linear:
+        quant1 = np.expand_dims((X[0]+X[1]) / np.sqrt(2), 1)
+        quant2 = np.expand_dims((-X[0]-X[1])/ np.sqrt(2),1)
+        quant3 = np.expand_dims((X[0]-X[1]) / np.sqrt(2) ,1)
+        quant4 = np.expand_dims((X[1]-X[0]) / np.sqrt(2) ,1)
 
-        tensor = np.concatenate([quant1, quant2, quant3, quant4], axis =2 )
-        minimum = -np.min(tensor, axis=2)
+        tensor = np.concatenate([quant1, quant2, quant3, quant4], axis =1 )
+        minimum = np.min(tensor, axis=1)
     else :
         quant1 = np.expand_dims((X[0]-X[1])**2 /10 - (X[0] + X[1]) / np.sqrt(2) + 3, 1)
         quant2 = np.expand_dims((X[0]-X[1])**2 /10 + (X[0] + X[1]) / np.sqrt(2) + 3,1)
@@ -23,9 +23,9 @@ def four_branch(X):
         quant4 = np.expand_dims((X[1]-X[0]) + 7/ np.sqrt(2) ,1)
 
         tensor = np.concatenate([quant1, quant2, quant3, quant4], axis =1 )
-        minimum = -np.min(tensor, axis=1)
+        minimum = np.min(tensor, axis=1)
 
-    return minimum
+    return -minimum
 
 
 #X according to a standard gaussian 
@@ -160,25 +160,3 @@ ax.clabel(cs, cs.levels, inline=True, fontsize=15)
 ax.set_title("Estimation with Vanilla SS")
 fig.savefig('.../figures_ss/Vanilla_SS_10000.png')
 plt.show()
-
-
-
-def four_branch_HD(X, beta =0):
-    d, N = X.shape 
-    quant1 = beta + np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis=1)
-    quant2 = beta - np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis= 1 )
-    quant3 = beta + np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2)+1 :, :], axis= 0)) / np.sqrt(d), axis=1)
-    quant4 = beta - np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2)+1 :, :], axis= 0)) / np.sqrt(d), axis=1)
-
-    tensor = np.concatenate([quant1, quant2, quant3, quant4], axis=1)
-
-    return - np.min(tensor, axis = 1)
-
-
-samples = np.random.normal(size = (10, N))
-pt = 9.3e-4
-t = 3.5
-cmc = CMC(N)
-print(cmc(four_branch_HD, samples, t))
-
-cmc.plot_trajectory(pt,cmc(four_branch_HD, samples, t) )

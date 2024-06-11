@@ -43,7 +43,7 @@ def subset_simulation(sample, threshold,phi, sd,  level = .1):
         L[0] = sample_threshold
         phi_accepted = phi_threshold
         for j in range(int(1/level-1)):
-            candidate = L[j] + np.random.normal(scale= sd, size=(2,N)) 
+            candidate = L[j] + np.random.normal(scale= sd, size=(dim,N)) 
             #stock for phi(candidate) in order to calculat it only once 
             phi_candidate = phi(candidate)
             ratio =  rv.pdf(candidate.T) / rv.pdf(L[j].T) *(phi_candidate> quantile[k]) # Transposé pour candidate si no vae 
@@ -70,7 +70,8 @@ def subset_simulation(sample, threshold,phi, sd,  level = .1):
 
 
 
-class MMA():
+class MMA(): #Modifier Metropolis Algorithm 
+    #-------------------------------- This Algo works only in the cas of independant variables ------------------------#
     def __init__(self, proposal, **kwargs) :
         super(MMA, self).__init__(**kwargs)
 
@@ -140,7 +141,7 @@ class CMC():
 
     def __call__(self, phi, samples, threshold):
         L = list()
-        for i in np.arange(0, self.N):
+        for i in np.arange(1, self.N):
             L.append(np.mean(phi(samples[:,:i ]) > threshold))
         return np.array(L)
     
@@ -149,3 +150,4 @@ class CMC():
         plt.hlines(target, 0, self.N, colors= 'red', linestyles= '--', label= r'$P_f')
         plt.legend()
         plt.show()
+
