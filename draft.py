@@ -55,13 +55,11 @@ from function.EM import *
 
 start = time.time()
 prior = MoGPrior(2,4)
-w_t, mu_t, sigma2_t, j = EM(z_mean, prior, 15, 1e-3)
+w_t, mu_t, sigma2_t, j = EM(z_mean, prior, 1000, 1e-2)
 print(w_t, j)
 print(time.time() - start)
 
 
-
-mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
 
 mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
 
@@ -76,7 +74,9 @@ vae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
 vae.fit(sample_threshold, epochs = 150, batch_size = 32, shuffle = True) 
 
 plt.plot(vae.history.history['kl_loss'])
+plt.show()
 plt.plot(vae.history.history['reconstruction_loss'])
+plt.show()
 
 z_mean,_, _ = encoder(sample_threshold)
 
@@ -95,3 +95,5 @@ for i in range(0,d):
   plt.hist(sample[:,i], bins = 'auto', density=True);
 
 plt.show()
+
+z =myMixture.getSample((10000, N))

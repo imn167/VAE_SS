@@ -56,7 +56,7 @@ def EM(z, prior, maxiter, epsilon):
     #storage.append([w_t, mu_t, sigma2_t])
     converged = False 
     j=1
-    while j< maxiter  and (not converged):
+    while j< maxiter  and ( not converged):
         #expectation 
         tau_membership = expectation(z, mu_t, sigma2_t, N, K, w_t)
         #maximization

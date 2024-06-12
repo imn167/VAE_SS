@@ -1,8 +1,10 @@
 import sys
-
+import matplotlib.pyplot as plt 
 sys.path.append('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/function')
 
 from VAE_GoM import *
+
+from EM import *
 
 
 class SS_VAE(): #Modifier Metropolis Algorithm 
@@ -49,14 +51,45 @@ class SS_VAE(): #Modifier Metropolis Algorithm
             #autoencoder training 
             ae = AutoEncoder(encoder, decoder)
             ae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3))
-            ae.fit(L[0] ,epochs=110, batch_size=150, shuffle=True, verbose = 0)
+            ae.fit(L[0].T ,epochs=100, batch_size=32, shuffle=True, verbose = 0)
 
             z_mean, _, _ = encoder(L[0])
+            #visualisation 
+            plt.figure()
+            plt.plot(ae.history.history['loss'])
+            plt.show()
             
+            plt.figure(figsize=(12,6))
+            for i in range(1):
+                plt.subplot(1,2, i+1)
+                plt.scatter(z_mean[:, i], z_mean[:,i+1], s = 5)
+            plt.show()
+
+            start = time.time()
+            prior = MoGPrior(2,4)
+            w_t, mu_t, sigma2_t, j = EM(z_mean, prior, 15, 1e-3)
+
+            mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
+
+            prior.means.assign(tf.constant(mu_t, dtype=tf.float32))
+            prior.logvars.assign(tf.math.log(tf.constant(sigma2_t, dtype=tf.float32)))
+            prior.w.assign(tf.constant(w_t.reshape(1,-1), dtype=tf.float32))
+
+            vae = VAE(encoder, decoder, prior)
+            vae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
+            vae.fit(sample_threshold, epochs = 150, batch_size = 32, shuffle = True) 
+
+
+            ColDist = [ot.Normal(np.array(mu), np.exp(0.5*np.array(sigma))) for mu, sigma in zip(prior.means, prior.logvars)]
+            weight = np.array(tf.nn.softmax(prior.w, axis =1)).reshape(-1)
+            myMixture = ot.Mixture(ColDist, weight)
 
             for j in range(int(1/level-1)):
                 candidate = np.zeros((dim, N)) # dim x N
-                for i in range(dim): #independance allow to treat dimension by dimension 
+                for i in range(N): #independance allow to treat dimension by dimension 
+                    z = myMixture.getSample(10000)
+                    r = np.random.choice(np.arange(10000))
+                    mu, logvar2 = decoder()
                     candidate_i = self.proposal.call(L[j, i, :]) #N
                     u = np.random.uniform(size = N) #N
                     r = self.proposal.density(candidate_i) / self.proposal.density(L[j,i,:]) #N
