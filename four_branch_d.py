@@ -4,15 +4,15 @@ import scipy.stats as sp
 import time 
 ################ Script pour le cas lineaire du 4-branches ###############
 
+#################### TEST DU MODELE DANS LE CAS 2D ########################
 
-
-def four_branch(X, beta =0):
+def four_branch(X):
    
     d, N = X.shape 
-    quant1 = beta + np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis=1)
-    quant2 = beta - np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis= 1 )
-    quant3 = beta + np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2)+1 :, :], axis= 0)) / np.sqrt(d), axis=1)
-    quant4 = beta - np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2)+1 :, :], axis= 0)) / np.sqrt(d), axis=1)
+    quant1 =  np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis=1)
+    quant2 = - np.expand_dims(np.sum(X, axis=0) / np.sqrt(d), axis= 1 )
+    quant3 = + np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2) :, :], axis= 0)) / np.sqrt(d), axis=1)
+    quant4 = - np.expand_dims((np.sum(X[: int(d/2), :], axis= 0) - np.sum(X[int(d/2) :, :], axis= 0)) / np.sqrt(d), axis=1)
 
     tensor = np.concatenate([quant1, quant2, quant3, quant4], axis=1)
     minimum = np.min(tensor, axis = 1)
@@ -59,9 +59,21 @@ def four_branch_2d(X, linear = False):
     return -minimum
 
 
+from function.SS_VAE import * 
+d = 10
+N = 10000
+rv = sp.multivariate_normal()
+ss_vae = SS_VAE(2,d, rv)
 
 
-sequence, k, failure, quantile, accep_rate = subset_simulation(samples, t, four_branch, 1)
+##### Monte Carlo simple #######
+cmc = CMC(N)
+print(cmc(four_branch, samples, t))
+
+cmc.plot_trajectory(pt,cmc(four_branch, samples, t) )
+
+
+sequence, k, failure, quantile, accep_rate = subset_simulation(samples, t, four_branch, .5)
 
 print(quantile, failure)
 
@@ -93,10 +105,7 @@ ax.set_title("Linear 4-branch with Vanilla SS")
 fig.savefig('.../figures_ss/Linear_VanillaSS.png')
 plt.show()
 
-cmc = CMC(N)
-print(cmc(four_branch, samples, t))
 
-cmc.plot_trajectory(pt,cmc(four_branch, samples, t) )
 
 
 class gaussian_kernel():
@@ -112,7 +121,7 @@ class gaussian_kernel():
     def density(self, x): #the X distribution is a product of standard gaussian 
         return self.rv.pdf(x)
 
-proposal = gaussian_kernel(.1)
+proposal = gaussian_kernel(.5)
 
 modified_metropolis = MMA(proposal)
 
@@ -154,5 +163,6 @@ fig.savefig('.../figures_ss/Linear_MMA.png')
 plt.show()
 
 time.time() - start
+
 
 

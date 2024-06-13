@@ -41,7 +41,7 @@ def subset_simulation(sample, threshold,phi, sd,  level = .1):
         L = np.zeros((int(1/level), dim, N)) 
         accep_sequance = np.zeros(N)
         L[0] = sample_threshold
-        phi_accepted = phi_threshold
+        #phi_accepted = phi_threshold
         for j in range(int(1/level-1)):
             candidate = L[j] + np.random.normal(scale= sd, size=(dim,N)) 
             #stock for phi(candidate) in order to calculat it only once 
@@ -50,10 +50,10 @@ def subset_simulation(sample, threshold,phi, sd,  level = .1):
             #MAJ
             u = np.random.uniform(size= N)
             L[j+1] =  L[j] * (u >= ratio) + candidate * (u< ratio)
-            phi_accepted[(u< ratio)] = phi_candidate[(u< ratio)]
+            phi_threshold[(u< ratio)] = phi_candidate[(u< ratio)]
             accep_sequance += 1 * (u<ratio)
         #phi_value management 
-        phi_threshold = phi_accepted
+        #phi_threshold = phi_accepted
         PHI = phi_threshold #new phi_values 
         
         #we only keep the last mcmc simulation

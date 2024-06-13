@@ -82,7 +82,8 @@ class VAE(tf.keras.Model):
 
             #we compute the first loss : the log-likelyhood 
             scale_x = tf.exp(x_log_var) #variance 
-            log_pdf = 0.5 * tf.reduce_sum(tf.pow(data-reconstruction, 2) / scale_x + x_log_var, axis = 1) #-log_pdf because we want to maximise it (SGD aim to minimize in keras)
+            log_pdf = 0.5 * tf.reduce_sum(tf.pow(data-reconstruction, 2) / scale_x + x_log_var, axis = 1) 
+            #-log_pdf because we want to maximise it (SGD aim to minimize in keras)
             reconstruction_loss =  tf.reduce_mean(log_pdf) #tf.multiply(log_pdf, y)
             kl_loss =  -0.5 * (1 +  z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = tf.reduce_mean(tf.reduce_sum(  kl_loss, axis =1 )) 

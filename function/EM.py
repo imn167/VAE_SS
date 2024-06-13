@@ -69,7 +69,7 @@ def EM(z, prior, maxiter, epsilon):
         diff_means = np.min(np.linalg.norm(traj_means[-1]-traj_means[-2], axis = 1))
         diff_sigma2 = np.min(np.linalg.norm(traj_sigma2[-1]- traj_sigma2[-2], axis = 1))
         diff_w = np.min(traj_w[-1]-traj_w[-2])
-        converged = (diff_means > epsilon) and (diff_sigma2 > epsilon) and (diff_w > epsilon)
+        converged = (diff_means > epsilon) or (diff_sigma2 > epsilon) or (diff_w > epsilon)
     
     return w_t, mu_t, sigma2, j
 
