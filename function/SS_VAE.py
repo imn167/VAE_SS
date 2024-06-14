@@ -81,6 +81,11 @@ class SS_VAE(): #Modifier Metropolis Algorithm
             vae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
             vae.fit(sample_threshold, epochs = 150, batch_size = 128, shuffle = True) 
 
+            plt.plot(vae.history.history['kl_loss'])
+            plt.show()
+
+            plt.plot(vae.history.history['reconstruction_loss'])
+            plt.show()
 
             ColDist = [ot.Normal(np.array(mu), np.exp(0.5*np.array(sigma))) for mu, sigma in zip(prior.means, prior.logvars)]
             weight = np.array(tf.nn.softmax(prior.w, axis =1)).reshape(-1)
@@ -105,9 +110,11 @@ class SS_VAE(): #Modifier Metropolis Algorithm
                     accep_sequance += 1 * (u<ratio)
                 print(j)
             sample = L[j+1]
-            print(sample)
             PHI = phi_threshold
-
+            print('-------------------------')
+            print(np.mean(PHI))
+            print('-------------------------')
+            
             self.sequence.append(sample)
             self.accep_rate.append(accep_sequance / int(1/level-1))
             self.quantile.append(np.quantile(PHI, 1-level )) #searching the next intermediate 

@@ -2,6 +2,8 @@ import numpy as np
 from function.SS_class import *
 import scipy.stats as sp 
 import time 
+from statsmodels.graphics import tsaplots
+
 ################ Script pour le cas lineaire du 4-branches ###############
 
 #################### TEST DU MODELE DANS LE CAS 2D ########################
@@ -26,6 +28,8 @@ N= 10000
 samples = np.random.normal(size = (2, N))
 pt = 9.3e-4
 t = 3.5
+
+####### Fonction de construction de plot en 2D ###########
 
 def construction_grid(xmin, xmax, ymin, ymax, npoints):
     x = np.linspace(xmin, xmax, npoints)
@@ -59,12 +63,13 @@ def four_branch_2d(X, linear = False):
     return -minimum
 
 
+############# Code implementation du modified dans le cas en GD ############
 from function.SS_VAE import * 
-d = 10
+d = 50
 N = 10000
 rv = sp.multivariate_normal()
 ss_vae = SS_VAE(2,d, rv)
-
+samples = np.random.normal(size = (d, N))
 
 ##### Monte Carlo simple #######
 cmc = CMC(N)
@@ -72,42 +77,45 @@ print(cmc(four_branch, samples, t))
 
 cmc.plot_trajectory(pt,cmc(four_branch, samples, t) )
 
+###### Vanilla Subset simulation 
+sequence, k, failure, quantile, accep_rate = subset_simulation(samples, t, four_branch, .4)
 
-sequence, k, failure, quantile, accep_rate = subset_simulation(samples, t, four_branch, .5)
+print(quantile)
+print(f"Probabilité de defaillance Pf_ss = {failure} et Pf {pt}")
 
-print(quantile, failure)
+if d <= 10 :
+    for j in range(len(sequence)):
+        plt.figure(figsize= (15,5))
+        for i in range(d):
+            plt.subplot(2,int(d/2), i+1)
+            plt.plot(sequence[j][i], label = r"$X_1^%i$"%(i+1))
+            plt.legend()
 
-plt.figure(figsize= (15,5))
-for i in range(len(sequence)):
-    plt.subplot(1,len(sequence), i+1)
-    plt.plot(sequence[i][0], label = r"$X_1^%i$"%(i+1))
-    plt.legend()
 
-
-plt.figure(figsize= (15,5))
-for i in range(len(sequence)):
-    plt.subplot(1,len(sequence), i+1)
-    plt.plot(sequence[i][1], label = r"$X_1^%i$"%(i+1))
-    plt.legend()
-
-plt.show()
+    plt.show()
 
 first_simu = sequence[0]
 last_simu = sequence[-1]
 
 fig, ax = plt.subplots()
-pc = ax.pcolormesh(pos[0], pos[1], four_branch_2d(pos, linear=True))
-fig.colorbar(pc)
-cs = ax.contour(pos[0], pos[1], four_branch_2d(pos, linear=True), levels = [t])
-ax.scatter(last_simu[0], last_simu[ 1], c = "red", s= 6)
-ax.scatter(first_simu[0], first_simu[ 1], c = "orange", s= 6)
-ax.set_title("Linear 4-branch with Vanilla SS")
-fig.savefig('.../figures_ss/Linear_VanillaSS.png')
-plt.show()
+a  =tsaplots.plot_acf(last_simu[0], ax = ax)
 
+if d ==2 : #Plot des simulation en 2D
+    fig, ax = plt.subplots()
+    pc = ax.pcolormesh(pos[0], pos[1], four_branch_2d(pos, linear=True))
+    fig.colorbar(pc)
+    cs = ax.contour(pos[0], pos[1], four_branch_2d(pos, linear=True), levels = [t])
+    ax.scatter(last_simu[0], last_simu[ 1], c = "red", s= 6)
+    ax.scatter(first_simu[0], first_simu[ 1], c = "orange", s= 6)
+    ax.set_title("Linear 4-branch with Vanilla SS")
+    fig.savefig('.../figures_ss/Linear_VanillaSS.png')
+    plt.show()
 
+print(f"Taux d'acceptation moyen pour chaque loi conditionnelle {np.mean(np.array(accep_rate), axis = 1)}")
 
+##### Modified M-H #####
 
+#utilisation d'un noyau gaissian pour chaque dimension : Metropolis 
 class gaussian_kernel():
     def __init__(self, sd,  **kwargs):
         super(gaussian_kernel,self).__init__(**kwargs)
@@ -121,48 +129,53 @@ class gaussian_kernel():
     def density(self, x): #the X distribution is a product of standard gaussian 
         return self.rv.pdf(x)
 
-proposal = gaussian_kernel(.5)
+
+proposal = gaussian_kernel(sd =.3)
 
 modified_metropolis = MMA(proposal)
 
 
 start = time.time()
-sequence, k, failure, quantile, accep_rate = modified_metropolis.call(samples, t, four_branch)
+sequence, k, failure, quantile, accep_rate = modified_metropolis(samples, t, four_branch)
 time.time() - start 
 
-print(k, failure, quantile)
+print(k)
+print(quantile)
+print(f"Probabilité de defaillance Pf = {failure} et {pt}")
 
 
-plt.figure(figsize= (15,5))
-for i in range(len(sequence)):
-    plt.subplot(1,len(sequence), i+1)
-    plt.plot(sequence[i][0], label = r"$X_1^%i$"%(i+1))
-    plt.legend()
+if d <= 10 :
+    for j in range(len(sequence)):
+        plt.figure(figsize= (15,5))
+        for i in range(d):
+            plt.subplot(2,int(d/2), i+1)
+            plt.plot(sequence[j][i], label = r"$X_1^%i$"%(i+1))
+            #c = tsaplots.plot_acf(sequence[j][i], label = r"$X_1^%i$"%(i+1))
+            plt.legend()
 
-
-plt.figure(figsize= (15,5))
-for i in range(len(sequence)):
-    plt.subplot(1,len(sequence), i+1)
-    plt.plot(sequence[i][1], label = r"$X_1^%i$"%(i+1))
-    plt.legend()
-
-plt.show()
+    plt.show()
 
 first_simu = sequence[0]
 last_simu = sequence[-1]
 
-fig, ax = plt.subplots()
-pc = ax.pcolormesh(pos[0], pos[1], four_branch_2d(pos, True))
-fig.colorbar(pc)
-cs = ax.contour(pos[0], pos[1], four_branch_2d(pos, True), levels = [t])
-ax.scatter(last_simu[0], last_simu[ 1], c = "red", s= 6)
-ax.scatter(first_simu[0], first_simu[ 1], c = "orange", s= 6)
-ax.clabel(cs, cs.levels, inline=True, fontsize=15)
-ax.set_title('Estimation with Modified Metropolis')
-fig.savefig('.../figures_ss/Linear_MMA.png')
+a = tsaplots.plot_acf(last_simu[0])
 plt.show()
+print(np.mean(four_branch(last_simu)))
 
-time.time() - start
+if d == 2 : #Plot des simulation en 2D
+    fig, ax = plt.subplots()
+    pc = ax.pcolormesh(pos[0], pos[1], four_branch_2d(pos, True))
+    fig.colorbar(pc)
+    cs = ax.contour(pos[0], pos[1], four_branch_2d(pos, True), levels = [t])
+    ax.scatter(last_simu[0], last_simu[ 1], c = "red", s= 6)
+    ax.scatter(first_simu[0], first_simu[ 1], c = "orange", s= 6)
+    ax.clabel(cs, cs.levels, inline=True, fontsize=15)
+    ax.set_title('Estimation with Modified Metropolis')
+    fig.savefig('.../figures_ss/Linear_MMA.png')
+    plt.show()
 
+print(time.time() - start)
+
+print(f"Taux d'acceptation moyen pour chaque loi conditionnelle {np.mean(np.array(accep_rate), axis=1)}")
 
 

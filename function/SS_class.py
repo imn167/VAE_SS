@@ -2,6 +2,7 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt 
 import sys 
+import scipy.stats as sp 
 
 sys.path.append("/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/function")
 #from VAE import *
@@ -80,7 +81,8 @@ class MMA(): #Modifier Metropolis Algorithm
         self.accep_rate = list()
         self.proposal = proposal
 
-    def call(self, sample, threshold, phi,  level = .1):
+    
+    def __call__(self, sample, threshold, phi,  level = .1):
         dim, N = np.shape(sample)
         PHI = phi(sample)
         self.quantile.append(np.quantile(PHI, 1-level)) #look for another way to do quantiles 
@@ -100,28 +102,28 @@ class MMA(): #Modifier Metropolis Algorithm
             sample_threshold = sample[:, random_seed] #N*level samples that lie in Fk 
             phi_threshold = PHI[random_seed]
             ## simulation according to mcmc 
-            chain = np.zeros((dim, N)) # mcmc chain 
             #tensor to parallelize the process 
             L = np.zeros((int(1/level), dim, N)) 
             accep_sequance = np.zeros(N)
             L[0] = sample_threshold
-            phi_accepted = phi_threshold
+            #phi_accepted = phi_threshold
             for j in range(int(1/level-1)):
                 candidate = np.zeros((dim, N)) # dim x N
                 for i in range(dim): #independance allow to treat dimension by dimension 
                     candidate_i = self.proposal.call(L[j, i, :]) #N
                     u = np.random.uniform(size = N) #N
-                    r = self.proposal.density(candidate_i) / self.proposal.density(L[j,i,:]) #N
+                    rv = sp.norm()
+                    r = rv.pdf(candidate_i) / rv.pdf(L[j,i,:]) #N
                     candidate_i = candidate_i * (u < r) + L[j+1, i, : ] * (u>= r) #N
                     candidate[i] = candidate_i
 
                 phi_candidate = phi(candidate) #N
-                phi_accepted[(phi_candidate > self.quantile[k])] = phi_candidate[(phi_candidate > self.quantile[k])]
+                phi_threshold[(phi_candidate > self.quantile[k])] = phi_candidate[(phi_candidate > self.quantile[k])]
                 L[j+1] = candidate * (phi_candidate > self.quantile[k]) + L[j] * (phi_candidate <= self.quantile[k])
                 accep_sequance += 1 * phi_candidate > self.quantile[k]
             
             sample = L[j+1]
-            phi_threshold = phi_accepted
+            #phi_threshold = phi_accepted
             PHI = phi_threshold
 
             self.sequence.append(sample)
