@@ -1,0 +1,5 @@
+------------------------------------------
+Taille de l'echantillon (10000, 10)
+MC estimation 0.0007
+Estimation SS de défaillance 0.0008779000000000003 et en moyenne 3.716785631074244 et quantile [1.9331432461979956, 2.798157663434984, 3.4648098310525475, 4.040349511326407]
+Taux d'acceptation en moyenne [0.06416 0.05231 0.04576]

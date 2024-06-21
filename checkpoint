@@ -1,0 +1,2 @@
+model_checkpoint_path: "GMVAE"
+all_model_checkpoint_paths: "GMVAE"
