@@ -1,10 +1,40 @@
 #MCMC chain visualisation with Vamprior 
 import numpy as np 
 import matplotlib.pyplot as plt 
+import scipy.stats as sp
+import openturns as ot
 
 chain = np.load('mcmcChain.npy')
 nchain, d = chain.shape
 from statsmodels.graphics import tsaplots
+
+
+##### latent space ####
+z_variationnel = np.load('z_variationnel.npy')
+ps_mean = np.load('ps_mean.npy')
+ps_logvar = np.load('ps_logvar.npy')
+
+def plot_contour(samples, mean, logvar):
+  K = np.shape(mean)[0] #number of mixture 
+  x = np.linspace(np.min(mean[:,0])-3, np.max(mean[:, 0])+3, 1000)
+  y = np.linspace(np.min(mean[:,1])-3, np.max(mean[:, 1])+3, 1000)
+  X, Y = np.meshgrid(x,y)
+  pos = np.dstack((X,Y))
+  gaussians = [sp.multivariate_normal(mu, np.diag(sigma)) for mu, sigma in zip(mean, np.exp(logvar))]
+  mix = np.zeros((1000, 1000))
+  for i in range(K):
+    mix += np.array( gaussians[i].pdf(pos))
+    plt.contour(X, Y,gaussians[i].pdf(pos), levels = [.1,.2,.5, .8])
+  #plt.contour(X, Y,mix/K, levels = [.1,.2,.5, .8])
+  plt.scatter(samples[:, 0], samples[:, 1], s = 6)
+  plt.savefig('../Vamprior/latent_space_Vamprior.png')
+  plt.show()
+  
+plot_contour(z_variationnel, ps_mean, ps_logvar)
+
+M = chain.shape[0]
+
+chain_lag = chain[np.arange(0,M, 5), :]
 
 fig,ax = plt.subplots(2,int(d/2))
 for i in range(int(d/2)):

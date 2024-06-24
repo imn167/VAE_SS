@@ -15,7 +15,7 @@ N, d = two_mode.shape
 print(N, d )
 
 #### Neural net
-prior = VP(d, 95)
+prior = VP(d, 35)
 encoder = Encoder(d, 2, True)
 decoder = Decoder(d, 2, True)
 
@@ -42,24 +42,38 @@ pseudo_inputs = prior(tf.eye(prior.K))
 ps_mean, ps_logvar, _ = encoder(pseudo_inputs) #K x latent_dim 
 aggregated_posterior = prior.mixture(ps_mean, ps_logvar) #prior 
 
+_, _, z_variationnel = encoder(two_mode)
+
+np.save('z_variationnel.npy', z_variationnel)
+np.save('ps_mean.npy', ps_mean.numpy())
+np.save('ps_logvar.npy', ps_logvar.numpy())
+
+
 def plot_prior( mu, sigma2, x1,x2, y1, y2):
     K = mu.shape[0]
     X, Y = np.meshgrid(np.linspace(x1,x2, 100), np.linspace(y1,y2, 1000))
     pos = np.dstack((X,Y))
-    rv =  [sp.multivariate_normal(mu, np.diag(sigma)) for mu, sigma in zip(mu, tf.exp(0.5*sigma2))]
+    rv =  [sp.multivariate_normal(mu, np.diag(sigma)) for mu, sigma in zip(mu, tf.exp(sigma2))]
     for i in range(K):
-        plt.contour(X, Y,np.array( rv[i].pdf(pos)))
+        plt.contour(X, Y,np.array( rv[i].pdf(pos)), levels = [.1,.2,.5])
+    plt.scatter(z_variationnel[:, 0], z_variationnel[:, 1], s=6)
     
     plt.title('Gaussians of the Vamprior Mixture')
     plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Trunacted_Gaussian_Vamprior.png')
     plt.show()
 
-plot_prior(ps_mean.numpy(), ps_logvar.numpy(), np.min(ps_mean.numpy()[: ,0])-3, np.max(ps_mean.numpy()[:, 0])+3,np.min(ps_mean.numpy()[: ,1])-3, np.max(ps_mean.numpy()[:, 1])+3 )
+plot_prior(ps_mean.numpy(), ps_logvar.numpy(), np.min(ps_mean.numpy()[: ,0])-3, 
+           np.max(ps_mean.numpy()[:, 0])+3,np.min(ps_mean.numpy()[: ,1])-3, np.max(ps_mean.numpy()[:, 1])+3 )
 
 
 #### Sampling according to the VAE
 Nc = 10000
 z = np.array(aggregated_posterior.sample(Nc))
+
+plt.hist2d(z[:, 0], z[:, 1], bins = (100,100))
+plt.scatter(z_variationnel[:, 0], z_variationnel[:, 1], s = 6, c = 'red')
+plt.show()
+
 mean_x, log_var_x = decoder(z) #we get each mean and log variance of the several distribution then we sample from it
 
 sample = np.random.normal(loc=mean_x.numpy(), scale= tf.exp(log_var_x.numpy()/2))
@@ -79,11 +93,12 @@ plt.plot(xx, dist.computePDF(xx.reshape(-1,1)))
 plt.subplot(5,5,2)
 plt.hist(sample[:,1], bins = 100, density=True);
 plt.plot(xx, dist.computePDF(xx.reshape(-1,1)))
-
+plt.savefig('../Vamprior/Trunacted_marginale.png')
 plt.show()
 
 #### 2d plot, truncated area 
 plt.hist2d(sample[:, 0], sample[:, 1], bins= (100, 100), cmap = plt.cm.jet)
+plt.savefig('../Vamprior/hist2dVamprior.png')
 plt.show()
 
 
@@ -112,12 +127,11 @@ for i in range(M):
   r =  np.random.choice(np.arange(Nc))
   zr = ZN[r].reshape(1,-1)
   mu, logvar =  decoder(zr) # d 
-  rv_gom = sp.multivariate_normal(mean = mu.numpy().reshape(-1), cov = np.exp(logvar.numpy()*0.5).reshape(-1))
+  rv_gom = sp.multivariate_normal(mean = mu.numpy().reshape(-1), cov = np.exp(logvar.numpy()).reshape(-1))
   candidat = rv_gom.rvs() #d
   
   ratio = truncated_density(candidat, rv, 2, dist) * inf_mixture.computePDF(chain[i]) / (truncated_density(chain[i], rv, 2, dist) * inf_mixture.computePDF(candidat))
   ratio = ratio.reshape(-1)
-  print(inf_mixture.computePDF(candidat))
   ratio_traj.append(ratio)
   u = np.random.uniform()
   if u < ratio:

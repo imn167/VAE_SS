@@ -27,13 +27,13 @@ ae.fit(two_mode,epochs=110, batch_size=150, shuffle=True, verbose = 0)
 z_mean, _, _ = encoder(two_mode)
 
 
-prior = MoGPrior(2,4)
-w_t, mu_t, sigma2_t, n_iter = EM(z_mean, prior, 35, 1e-2)
+prior = MoGPrior(2,15) # 35 gaussienne diagonales dnas R2
+w_t, mu_t, sigma2_t, n_iter = EM(z_mean, prior, 80, 1e-2)
 print(w_t, n_iter)
 
 
 
-mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
+mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0])-2, max(z_mean.numpy()[:,0])+2, min(z_mean.numpy()[:,1])-2, max(z_mean.numpy()[:,1])+2 )
 
 
 prior.means.assign(tf.constant(mu_t, dtype=tf.float32))
@@ -46,9 +46,10 @@ vae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.001))
 vae.fit(two_mode, epochs = 150, batch_size = 100, shuffle = True) 
 
 vae.save('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE/vae.keras')
-z_mean, _, _ = encoder(two_mode)
+z_mean, _, z_variationnel = encoder(two_mode)
 
-mixture_plot(z_mean.numpy(), w_t, mu_t, sigma2_t, min(z_mean.numpy()[:,0]), max(z_mean.numpy()[:,0]), min(z_mean.numpy()[:,1]), max(z_mean.numpy()[:,1]) )
+mixture_plot(z_variationnel.numpy(), w_t, mu_t, sigma2_t, min(z_variationnel.numpy()[:,0]), max(z_variationnel.numpy()[:,0]), min(z_variationnel.numpy()[:,1]),
+              max(z_variationnel.numpy()[:,1]) )
 
 print(time.time() - start)
 
@@ -84,6 +85,9 @@ plt.plot(xx, dist.computePDF(xx.reshape(-1,1)))
 plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Truncated_Gaussian_reconstruction.png')
 plt.show()
 
+#### 2d plot, truncated area 
+plt.hist2d(sample[:, 0], sample[:, 1], bins= (100, 100), cmap = plt.cm.jet)
+plt.show()
 
 def truncated_density(x, rv, n_comp, distri):
   return rv.pdf(x[n_comp : ]) * distri.computePDF(x[0]) * distri.computePDF(x[1])
@@ -114,10 +118,11 @@ for i in range(M):
   r =  np.random.choice(np.arange(Nc))
   zr = Z_N[r].reshape(1,-1)
   mu, logvar =  decoder(zr) # d 
-  rv_gom = sp.multivariate_normal(mean = mu.numpy().reshape(-1), cov = np.exp(logvar.numpy()*0.5).reshape(-1))
+  rv_gom = sp.multivariate_normal(mean = mu.numpy().reshape(-1), cov = np.exp(logvar.numpy()).reshape(-1))
   candidat = rv_gom.rvs() #d
-  
+  ratio_traj = list()
   ratio = truncated_density(candidat, rv, 2, dist) * inf_mixture.computePDF(chain[i]) / (truncated_density(chain[i], rv, 2, dist) * inf_mixture.computePDF(candidat))
+  ratio_traj.append(ratio)
   u = np.random.uniform()
   if u < ratio:
     chain[i+1] = candidat
@@ -140,9 +145,5 @@ plt.show()
 plt.hist(chain[:, 2], density = True, bins= 100)
 plt.show()
 
-from statsmodels.graphics import tsaplots
-fig, ax = plt.subplots(2,d, figsize = (12,5))
-for i in range(d):
-  tsaplots.plot_acf(chain[:, i], ax = ax[i], title = r"$X_%i"%i)
-
-plt.show()
+np.save('GoM_MCMC_chain.npy', chain)
+np.save('GoM_ratio_MCMC.npy', np.array(ratio_traj))

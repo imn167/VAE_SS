@@ -39,8 +39,8 @@ plt.savefig('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/figures_ss/Truncated_Gauss
 plt.show()
 
 start = time.time()
-prior = MoGPrior(2,4)
-w_t, mu_t, sigma2_t, n_iter = EM(z_mean, prior, 35, 1e-3)
+prior = MoGPrior(2,16)
+w_t, mu_t, sigma2_t, n_iter = EM(z_mean, prior, 65, 1e-2)
 print(w_t, n_iter)
 print(time.time() - start)
 
@@ -56,7 +56,7 @@ prior.w.assign(tf.constant(w_t.reshape(1,-1), dtype=tf.float32))
 
 vae = VAE(encoder, decoder, prior, name_prior = 'GoM')
 vae.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.001))
-vae.fit(two_mode, epochs = 150, batch_size = 100, shuffle = True) 
+vae.fit(two_mode, epochs = 200, batch_size = 100, shuffle = True) 
 
 
 z_mean,_, _ = encoder(two_mode)
@@ -97,9 +97,9 @@ plt.show()
 
 ##### saving the models ####
 
-vae.save_weights('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE', save_format='tf')
-vae.save('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE/vae.keras')
-vae = tf.keras.load_model('vae.keras')
+#vae.save_weights('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE', save_format='tf')
+#vae.save('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE/vae.keras')
+#vae = tf.keras.load_model('vae.keras')
 
-decoder.save_weights('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE/decoder.keras')
-encoder.save('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE/encoder.keras')
+#decoder.save_weights('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE/decoder.keras')
+#encoder.save('/Users/ibouafia/Desktop/Stage/VAE/VAE_SS/GMVAE/encoder.keras')
